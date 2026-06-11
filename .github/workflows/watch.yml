@@ -1,0 +1,40 @@
+name: Mac mini refurb watch
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'   # every 15 minutes (UTC); GitHub may delay under load
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Set to 1 to send a self-test ping instead of a real check'
+        required: false
+        default: '0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macmini-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check stock
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_MODE: ${{ github.event.inputs.test_mode }}
+        run: bash check.sh
+      - name: Persist state
+        if: ${{ github.event.inputs.test_mode != '1' }}
+        run: |
+          if ! git diff --quiet state.txt; then
+            git config user.name "macmini-watch-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add state.txt
+            git commit -m "update stock state [skip ci]"
+            git push
+          fi
