@@ -1,0 +1,40 @@
+name: Milpitas Section 8 housing watch
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'   # every 3 hours (UTC); housing listings don't churn by the minute
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Set to 1 to send a self-test ping (current matches) instead of watching for new ones'
+        required: false
+        default: '0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: housing-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Milpitas Section 8 listings
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_MODE: ${{ github.event.inputs.test_mode }}
+        run: python3 housing_watch.py
+      - name: Persist state
+        if: ${{ github.event.inputs.test_mode != '1' }}
+        run: |
+          if ! git diff --quiet housing_state.txt; then
+            git config user.name "housing-watch-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add housing_state.txt
+            git commit -m "update housing state [skip ci]"
+            git push
+          fi
