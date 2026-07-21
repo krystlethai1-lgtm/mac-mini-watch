@@ -1,0 +1,40 @@
+name: Milpitas Craigslist ADU/duplex watch
+
+on:
+  schedule:
+    - cron: '30 */3 * * *'   # every 3 hours, offset from the AffordableHousing watch
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Set to 1 to send a self-test ping (current matches) instead of watching for new ones'
+        required: false
+        default: '0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: craigslist-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Craigslist Milpitas rentals
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_MODE: ${{ github.event.inputs.test_mode }}
+        run: python3 craigslist_watch.py
+      - name: Persist state
+        if: ${{ github.event.inputs.test_mode != '1' }}
+        run: |
+          if ! git diff --quiet craigslist_state.txt; then
+            git config user.name "housing-watch-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add craigslist_state.txt
+            git commit -m "update craigslist state [skip ci]"
+            git push
+          fi
